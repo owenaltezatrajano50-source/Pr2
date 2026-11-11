@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DolQuest – Learn Java by Questing</title>
+<style>
+:root{--bg:#e8f3f2;--ink:#12303a;--card:#fff;--amber:#f2a900;--green:#2e9e6b;--coral:#e4572e;--line:#bcd6d4;--mute:#5a7a80}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Trebuchet MS",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+header{background:var(--ink);color:#fff;padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+header h1{margin:0;font-size:1.4rem;letter-spacing:.5px}
+header h1 span{color:var(--amber)}
+.stats{display:flex;gap:14px;font-size:.9rem;align-items:center}
+.bar{width:110px;height:8px;background:#2c4b56;border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--amber);width:0}
+main{max-width:900px;margin:0 auto;padding:16px}
+h2{margin:22px 0 10px;font-size:1.15rem}
+.map{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.node{background:var(--card);border:2px solid var(--line);border-radius:10px;padding:10px;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.node b{display:block}
+.node small{color:var(--mute)}
+.node.done{border-color:var(--green)}
+.node.cur{border-color:var(--amber);box-shadow:0 0 0 3px #f2a90044}
+.node.locked{opacity:.5;cursor:not-allowed}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+textarea{width:100%;min-height:210px;font:14px/1.45 Consolas,monospace;background:#0f2229;color:#d8f1ee;border:0;border-radius:8px;padding:10px;tab-size:4;resize:vertical}
+button.btn{font:inherit;border:0;border-radius:8px;padding:9px 16px;cursor:pointer;background:var(--amber);color:var(--ink);font-weight:700}
+button.btn.alt{background:#dcebea}
+button.btn:disabled{opacity:.6}
+button:focus-visible,textarea:focus-visible,input:focus-visible{outline:3px solid var(--coral);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+pre#out{background:#f4f9f9;border:1px solid var(--line);border-radius:8px;padding:10px;white-space:pre-wrap;min-height:50px;margin:10px 0 0}
+.ok{color:var(--green);font-weight:700}.bad{color:var(--coral);font-weight:700}
+.badges span{display:inline-block;background:var(--ink);color:#fff;border-radius:14px;padding:3px 12px;margin:3px 4px 0 0;font-size:.85rem}
+.badges em{color:var(--mute)}
+table{width:100%;border-collapse:collapse}
+td,th{padding:6px;border-bottom:1px solid var(--line);text-align:left}
+input[type=text]{font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px}
+.note{font-size:.85rem;color:var(--mute)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dol<span>Quest</span></h1>
+  <div class="stats">
+    <span id="lv">Lv 1</span>
+    <div class="bar"><i id="xpbar"></i></div>
+    <span id="xp">0 XP</span>
+    <span id="streak"></span>
+  </div>
+</header>
+<main>
+  <div class="panel">
+    <label for="name"><b>Your name</b></label>
+    <input type="text" id="name" placeholder="Enter your name">
+    <button class="btn alt" id="saveName">Save</button>
+  </div>
+
+  <h2>Quest map</h2>
+  <div class="map" id="map"></div>
+
+  <h2 id="qtitle">Select a quest</h2>
+  <div class="panel" id="quest" hidden>
+    <p id="story"></p>
+    <textarea id="code" spellcheck="false" aria-label="Java code editor"></textarea>
+    <div class="row">
+      <button class="btn" id="run">Run &amp; check</button>
+      <button class="btn alt" id="hint">Hint (-5 XP)</button>
+      <button class="btn alt" id="reset">Reset code</button>
+    </div>
+    <p class="note" id="hintbox"></p>
+    <pre id="out">Output will appear here.</pre>
+  </div>
+
+  <h2>Badges</h2>
+  <div class="panel badges" id="badges"></div>
+
+  <h2>Leaderboard</h2>
+  <div class="panel">
+    <table><thead><tr><th>#</th><th>Name</th><th>XP</th></tr></thead><tbody id="board"></tbody></table>
+    <p class="note">Prototype: saved only on this device. Replace with Firebase to share across the class.</p>
+  </div>
+
+  <h2>Research data</h2>
+  <div class="panel">
+    <button class="btn alt" id="csv">Download attempts (CSV)</button>
+    <p class="note">Every run is logged (student, quest, pass/fail, seconds, time). Use this for your results.</p>
+  </div>
+</main>
+
+<script>
+/* ===== SETTINGS ===== */
+// Real Java running: fill these in (Judge0 CE on RapidAPI or your own server).
+// Leave JUDGE0_URL empty to use demo mode (simple pattern checks, no real compile).
+const CONFIG = {
+  JUDGE0_URL: "",                       // e.g. "https://judge0-ce.p.rapidapi.com"
+  RAPIDAPI_KEY: "",                     // your key
+  RAPIDAPI_HOST: "judge0-ce.p.rapidapi.com",
+  JAVA_LANG_ID: 62                      // Java (OpenJDK)
+};
+
+/* ===== QUESTS (edit/add yours here) ===== */
+const QUESTS = [
+ {id:1,topic:"Variables",badge:"Variable Voyager",xp:20,
+  story:"Greet the realm! Print exactly: Hello, DolQuest!",
+  starter:'public class Main {\n    public static void main(String[] args) {\n        // write your code here\n\n    }\n}',
+  expected:"Hello, DolQuest!",must:[/System\.out\.print/],hint:"Use System.out.println(\"...\");"},
+ {id:2,topic:"Variables",badge:"Data Keeper",xp:20,
+  story:"Create an int variable age = 16, then print: Age: 16",
+  starter:'public class Main {\n    public static void main(String[] args) {\n        // declare age and print it\n\n    }\n}',
+  expected:"Age: 16",must:[/int\s+age\s*=\s*16/,/System\.out\.print/],hint:"System.out.println(\"Age: \" + age);"},
+ {id:3,topic:"Conditionals",badge:"Path Chooser",xp:25,
+  story:"score is 85. If score >= 75 print Passed, otherwise print Failed.",
+  starter:'public class Main {\n    public static void main(String[] args) {\n        int score = 85;\n        // your if-else here\n\n    }\n}',
+  expected:"Passed",must:[/if\s*\(/,/else/],hint:"if (score >= 75) { ... } else { ... }"},
+ {id:4,topic:"Loops",badge:"Loop Master",xp:30,
+  story:"Use a loop to print the numbers 1 to 5, one per line.",
+  starter:'public class Main {\n    public static void main(String[] args) {\n        // your loop here\n\n    }\n}',
+  expected:"1\n2\n3\n4\n5",must:[/(for|while)\s*\(/],hint:"for (int i = 1; i <= 5; i++) { ... }"},
+ {id:5,topic:"Arrays",badge:"Array Ranger",xp:35,
+  story:"Add up all numbers in the array {3, 7, 2} using a loop and print the sum (12).",
+  starter:'public class Main {\n    public static void main(String[] args) {\n        int[] nums = {3, 7, 2};\n        // sum them and print\n\n    }\n}',
+  expected:"12",must:[/(for|while)\s*\(/],hint:"Make int sum = 0; then add each nums[i] inside the loop."},
+ {id:6,topic:"Methods",badge:"Method Knight",xp:40,
+  story:"Write a method square(int n) that returns n*n. Print square(6) (36).",
+  starter:'public class Main {\n    // write square() here\n\n    public static void main(String[] args) {\n        // call it and print\n\n    }\n}',
+  expected:"36",must:[/static\s+int\s+square\s*\(\s*int\s+\w+\s*\)/,/return/],hint:"static int square(int n) { return n * n; }"}
+];
+
+/* ===== STATE ===== */
+const KEY="dolquest_v1";
+let S={name:"",xp:0,done:[],badges:[],lastDay:"",streak:0,attempts:[]};
+try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(S,JSON.parse(r));}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+const $=id=>document.getElementById(id);
+let cur=null,startT=0,hintUsed=false;
+
+/* ===== RENDER ===== */
+function render(){
+  $("name").value=S.name;
+  const lv=Math.floor(S.xp/100)+1;
+  $("lv").textContent="Lv "+lv;
+  $("xp").textContent=S.xp+" XP";
+  $("xpbar").style.width=(S.xp%100)+"%";
+  $("streak").textContent=S.streak>0?S.streak+"-day streak":"";
+  $("map").innerHTML="";
+  QUESTS.forEach((q,i)=>{
+    const done=S.done.includes(q.id);
+    const unlocked=i===0||S.done.includes(QUESTS[i-1].id);
+    const b=document.createElement("button");
+    b.className="node "+(done?"done":unlocked?"cur":"locked");
+    b.disabled=!unlocked;
+    b.innerHTML="<b>"+(done?"✔ ":"")+q.topic+"</b><small>Quest "+q.id+" · "+q.xp+" XP</small>";
+    b.onclick=()=>openQuest(q);
+    $("map").appendChild(b);
+  });
+  $("badges").innerHTML=S.badges.length?S.badges.map(b=>"<span>"+b+"</span>").join(""):"<em>Finish a quest to earn your first badge.</em>";
+  const list=JSON.parse(localStorage.getItem(KEY+"_board")||"[]");
+  $("board").innerHTML=list.sort((a,b)=>b.xp-a.xp).slice(0,10).map((p,i)=>"<tr><td>"+(i+1)+"</td><td>"+esc(p.name)+"</td><td>"+p.xp+"</td></tr>").join("")||"<tr><td colspan=3>No players yet.</td></tr>";
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+function openQuest(q){
+  cur=q;startT=Date.now();hintUsed=false;
+  $("quest").hidden=false;
+  $("qtitle").textContent="Quest "+q.id+": "+q.topic;
+  $("story").textContent=q.story;
+  $("code").value=q.starter;
+  $("hintbox").textContent="";
+  $("out").textContent="Output will appear here.";
+  $("quest").scrollIntoView({behavior:"smooth"});
+}
+
+/* ===== RUN & CHECK ===== */
+async function runJava(code){
+  if(!CONFIG.JUDGE0_URL){ // demo mode: no real compile
+    const ok=cur.must.every(r=>r.test(code));
+    return {demo:true,stdout:ok?cur.expected:"",stderr:ok?"":"Demo check: your code is missing something required."};
+  }
+  const res=await fetch(CONFIG.JUDGE0_URL+"/submissions?base64_encoded=false&wait=true",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","X-RapidAPI-Key":CONFIG.RAPIDAPI_KEY,"X-RapidAPI-Host":CONFIG.RAPIDAPI_HOST},
+    body:JSON.stringify({source_code:code,language_id:CONFIG.JAVA_LANG_ID})
+  });
+  const d=await res.json();
+  return {stdout:(d.stdout||"").trim(),stderr:d.compile_output||d.stderr||""};
+}
+
+$("run").onclick=async()=>{
+  if(!cur)return;
+  $("run").disabled=true;$("out").textContent="Running...";
+  let pass=false,msg="";
+  try{
+    const r=await runJava($("code").value);
+    pass=r.stdout.trim()===cur.expected;
+    msg=(r.stdout?r.stdout+"\n\n":"")+(r.stderr?r.stderr+"\n\n":"");
+    msg+=pass?'<span class="ok">Correct! Quest complete.</span>':'<span class="bad">Not yet. Expected output: '+esc(cur.expected.replace(/\n/g," / "))+'</span>';
+    if(r.demo)msg+='\n<span class="note">(Demo mode: connect Judge0 for real compiling.)</span>';
+  }catch(e){msg='<span class="bad">Could not run code. Check your connection or Judge0 settings.</span>';}
+  $("out").innerHTML=msg.replace(/^(?!<)/,"");
+  S.attempts.push({student:S.name||"anonymous",quest:cur.id,topic:cur.topic,passed:pass,seconds:Math.round((Date.now()-startT)/1000),time:new Date().toISOString()});
+  if(pass&&!S.done.includes(cur.id)){
+    S.done.push(cur.id);
+    S.xp+=Math.max(5,cur.xp-(hintUsed?5:0));
+    if(!S.badges.includes(cur.badge))S.badges.push(cur.badge);
+    bumpStreak();updateBoard();
+  }
+  save();render();$("run").disabled=false;
+};
+
+$("hint").onclick=()=>{if(!cur)return;hintUsed=true;$("hintbox").textContent="Hint: "+cur.hint;};
+$("reset").onclick=()=>{if(cur)$("code").value=cur.starter;};
+$("saveName").onclick=()=>{S.name=$("name").value.trim();save();updateBoard();render();};
+
+function bumpStreak(){
+  const today=new Date().toISOString().slice(0,10);
+  if(S.lastDay===today)return;
+  const y=new Date(Date.now()-864e5).toISOString().slice(0,10);
+  S.streak=S.lastDay===y?S.streak+1:1;S.lastDay=today;
+}
+function updateBoard(){
+  if(!S.name)return;
+  let l=JSON.parse(localStorage.getItem(KEY+"_board")||"[]");
+  const p=l.find(x=>x.name===S.name);
+  if(p)p.xp=S.xp;else l.push({name:S.name,xp:S.xp});
+  try{localStorage.setItem(KEY+"_board",JSON.stringify(l));}catch(e){}
+}
+
+$("csv").onclick=()=>{
+  const rows=[["student","quest","topic","passed","seconds","time"]].concat(S.attempts.map(a=>[a.student,a.quest,a.topic,a.passed,a.seconds,a.time]));
+  const blob=new Blob([rows.map(r=>r.join(",")).join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="dolquest_attempts.csv";a.click();
+};
+
+/* Allow Tab key in the editor */
+$("code").addEventListener("keydown",e=>{
+  if(e.key==="Tab"){e.preventDefault();const t=e.target,s=t.selectionStart;
+    t.value=t.value.slice(0,s)+"    "+t.value.slice(t.selectionEnd);t.selectionStart=t.selectionEnd=s+4;}
+});
+
+render();
+</script>
+</body>
+</html>
